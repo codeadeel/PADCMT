@@ -1,0 +1,44 @@
+name: DockerHub Image Push
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  GPU-Builds:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - name: main Branch Checkout
+      uses: actions/checkout@v3
+
+    - name: Docker Login
+      run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
+
+    - name: Build GRPC Server
+      run: docker build -t ${{secrets.DOCKER_USER}}/person:grpcserver -f BuildGRPCServer.Dockerfile .
+    - name: Push GRPC Server
+      run: docker push ${{secrets.DOCKER_USER}}/person:grpcserver
+    - name: Residue Removal
+      run: docker rmi $(docker images -a -q)
+
+  CPU-Builds:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - name: main Branch Checkout
+      uses: actions/checkout@v3
+
+    - name: Docker Login
+      run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASSWORD}}
+
+    - name: Build REST API Server
+      run: docker build -t ${{secrets.DOCKER_USER}}/person:restserver -f BuildRESTServer.Dockerfile .
+    - name: Push REST API Server
+      run: docker push ${{secrets.DOCKER_USER}}/person:restserver
+
+    - name: Build Person Live Demo
+      run: docker build -t ${{secrets.DOCKER_USER}}/person:livedemo -f BuildLiveDemo.Dockerfile .
+    - name: Push Person Live Demo
+      run: docker push ${{secrets.DOCKER_USER}}/person:livedemo
