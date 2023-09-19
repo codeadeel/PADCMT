@@ -1,0 +1,94 @@
+version: '3.9'
+
+services:
+
+  inferenceServerGRPC:
+    build:
+      context: .
+      dockerfile: BuildGRPCServer.Dockerfile
+    image: codeadeel/person:grpcserver
+    container_name: personGRPCServer
+    hostname: persongrpcinference
+    expose:
+      - 8080
+    volumes:
+      - ./Resources/personDetect_Nx3x640x640.onnx:/personDetect_Nx3x640x640.onnx:ro
+    environment:
+      - targetWidth=640
+      - targetHeight=640
+      - detectionModel=/personDetect_Nx3x640x640.onnx
+      - serverIp=[::]:8080
+      - messageLength=1000000000
+      - numWorkers=1
+    networks:
+      - personNetwork
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  
+  inferenceServerREST:
+    build:
+      context: .
+      dockerfile: BuildRESTServer.Dockerfile
+    image: codeadeel/person:restserver
+    container_name: personRESTServer
+    hostname: personrestinference
+    expose:
+      - 8080
+    environment:
+      - grpcServerIP=persongrpcinference:8080
+      - imageWidth=640
+      - imageHeight=640
+      - inferencePort=8080
+      - apiRoute=/person
+    networks:
+      - personNetwork
+    depends_on:
+      - inferenceServerGRPC
+  
+  liveDemoPerson:
+    build:
+      context: .
+      dockerfile: BuildLiveDemo.Dockerfile
+    image: codeadeel/person:livedemo
+    container_name: personLiveDemo
+    hostname: personlivedemo
+    expose:
+      - 8080
+    environment:
+      - serverIP=persongrpcinference:8080
+      - pageUpdateInterval=1000
+    networks:
+      - personNetwork
+    depends_on:
+      - inferenceServerGRPC
+  
+  virtRouter:
+    image: nginx@sha256:08bc36ad52474e528cc1ea3426b5e3f4bad8a130318e3140d6cfe29c8892c7ef
+    container_name: personRouter
+    hostname: personrouter
+    ports:
+      - 1251:1200 # GRPC & REST Inference Server
+      - 1252:1400 # Live Demo (/livedemo)
+    volumes:
+      - ./NGINX/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./NGINX/person.crt:/home/person.crt:ro
+      - ./NGINX/person.key:/home/person.key:ro
+    networks:
+      - personNetwork
+    depends_on:
+      - inferenceServerGRPC
+      - inferenceServerREST
+      - liveDemoPerson
+
+networks:
+  personNetwork:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.22.0.1/16
